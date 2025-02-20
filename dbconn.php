@@ -4,9 +4,9 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 // Database connection details
 $servername = "localhost";  // Change if needed
-$username = "root";         // Change if needed
-$password = "";             // Change if needed
-$dbname = "research";       // Change to match your database
+$username   = "root";       // Change if needed
+$password   = "";           // Change if needed
+$dbname     = "research";   // Change to match your database
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -72,6 +72,36 @@ function deleteResearch($id) {
     
     return $result;
 }
+
+// ---------- Show Modal Function ----------
+// Call this function in your page after an operation to display a Bootstrap modal with a custom message.
+    function showModal($title, $message) {
+        echo '
+        <!-- Modal -->
+        <div class="modal fade" id="messageModal" tabindex="-1" role="dialog" aria-labelledby="messageModalLabel" aria-hidden="true">
+          <div class="modal-dialog" role="document">
+             <div class="modal-content">
+                <div class="modal-header">
+                   <h5 class="modal-title" id="messageModalLabel">' . htmlspecialchars($title) . '</h5>
+                   <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                      <span aria-hidden="true">&times;</span>
+                   </button>
+                </div>
+                <div class="modal-body">' . htmlspecialchars($message) . '</div>
+                <div class="modal-footer">
+                   <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+             </div>
+          </div>
+        </div>
+        <script>
+          $(document).ready(function(){
+             $("#messageModal").modal("show");
+          });
+        </script>
+        ';
+    }
+    
 
 // Test connection (optional)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['test'])) {

@@ -384,6 +384,7 @@ h6 {
 .header-nav .nav-profile span {
   font-size: 14px;
   font-weight: 600;
+  
 }
 
 .header-nav .badge-number {
@@ -409,6 +410,7 @@ h6 {
 
 .header-nav .profile .dropdown-header span {
   font-size: 14px;
+  
 }
 
 .header-nav .profile .dropdown-item {
@@ -842,6 +844,7 @@ h6 {
 .card-title span {
   font-size: 14px;
   color: gray;
+  
 }
 
 /* Table styling */

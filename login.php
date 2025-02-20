@@ -83,7 +83,7 @@ $conn->close();
               <div class="d-flex justify-content-center py-4">
                 <a href="login.php" class="logo d-flex align-items-center w-auto">
                   <img src="assets/img/llcc.png" alt="">
-                  <span class="d-none d-lg-block" style="color: #012970;">Bias System</span>
+                  <span class="d-none d-lg-block" style="color: #012970;" >Bias System</span>
                 </a>
               </div>
 

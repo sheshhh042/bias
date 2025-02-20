@@ -5,113 +5,107 @@ use PHPMailer\PHPMailer\Exception;
 require 'vendor/autoload.php';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Retrieve form data and trim extra spaces
-    $name     = trim($_POST['name']);
-    $email    = trim($_POST['email']);
-    $username = trim($_POST['username']);
-    $password = $_POST['password']; // Remember to hash the password
+  // Retrieve form data and trim extra spaces
+  $name     = trim($_POST['name']);
+  $email    = trim($_POST['email']);
+  $username = trim($_POST['username']);
+  $password = $_POST['password']; // Remember to hash the password
 
-    // Validate email format
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        echo "Invalid email format.";
-        exit;
+  // Validate email format
+  if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    echo "Invalid email format.";
+    exit;
+  }
+
+  // Check if the email is a Gmail address (case-insensitive)
+  if (!preg_match('/@gmail\.com$/i', $email)) {
+    echo "Please register with a Gmail account.";
+    exit;
+  }
+
+  // Optional: Check password strength
+  function checkPasswordStrength($password) {
+    $strength = 0;
+    if (strlen($password) > 5) $strength++;
+    if (strlen($password) > 7) $strength++;
+    if (preg_match('/[A-Z]/', $password)) $strength++;
+    if (preg_match('/[0-9]/', $password)) $strength++;
+    if (preg_match('/[\W]/', $password)) $strength++;
+    return $strength;
+  }
+  if (checkPasswordStrength($password) < 3) {
+    echo "Password is not strong enough.";
+    exit;
+  }
+
+  // Check if the email is already registered
+  $sql_check = "SELECT * FROM users WHERE email=?";
+  $stmt_check = $conn->prepare($sql_check);
+  if ($stmt_check) {
+    $stmt_check->bind_param("s", $email);
+    $stmt_check->execute();
+    $stmt_check->store_result();
+    if ($stmt_check->num_rows > 0) {
+      echo "This Email is already registered.";
+      $stmt_check->close();
+      exit;
     }
+    $stmt_check->close();
+  } else {
+    die("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+  }
 
-    // Check if the email is a Gmail address (case-insensitive)
-if (!preg_match('/@gmail\.com$/i', $email)) {
-  echo "Please register with a Gmail account.";
-  exit;
-}
+  // Generate a verification token
+  $verification_token = md5($email . time());
 
+  // Prepare the INSERT query (assumes your table has a column named verification_code)
+  $sql_insert = "INSERT INTO users (name, email, username, password, verification_code) VALUES (?, ?, ?, ?, ?)";
+  $stmt = $conn->prepare($sql_insert);
+  if ($stmt === false) {
+    die("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+  }
 
-    // Optional: Check password strength
-    function checkPasswordStrength($password) {
-        $strength = 0;
-        if (strlen($password) > 5) $strength++;
-        if (strlen($password) > 7) $strength++;
-        if (preg_match('/[A-Z]/', $password)) $strength++;
-        if (preg_match('/[0-9]/', $password)) $strength++;
-        if (preg_match('/[\W]/', $password)) $strength++;
-        return $strength;
-    }
-    if (checkPasswordStrength($password) < 3) {
-        echo "Password is not strong enough.";
-        exit;
-    }
+  // Hash the password before saving it to the database
+  $password_hashed = password_hash($password, PASSWORD_DEFAULT);
+  $stmt->bind_param("sssss", $name, $email, $username, $password_hashed, $verification_token);
 
-    // Check if the email is already registered
-    $sql_check = "SELECT * FROM users WHERE email=?";
-    $stmt_check = $conn->prepare($sql_check);
-    if ($stmt_check) {
-        $stmt_check->bind_param("s", $email);
-        $stmt_check->execute();
-        $stmt_check->store_result();
-        if ($stmt_check->num_rows > 0) {
-            echo "This Email is already registered.";
-            $stmt_check->close();
-            exit;
-        }
-        $stmt_check->close();
+  // Execute the query
+  if ($stmt->execute()) {
+    // Build the verification link
+    $verification_link = "http://localhost/research/verify.php?email=" . urlencode($email) . "&token=" . $verification_token;
+
+    // Prepare data for sendmail.php
+    $post_data = [
+      'email'             => $email,
+      'name'              => $name,
+      'verification_link' => $verification_link
+    ];
+
+    // Use cURL to send a POST request to sendmail.php
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "http://localhost/research/sendmail.php");
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    // Show modal based on response
+    if ($response === "Email sent successfully") {
+      showModal("Success", "Registration successful! A verification email has been sent to your email address.");
     } else {
-        die("Prepare failed: (" . $conn->errno . ") " . $conn->error);
+      showModal("Success", "Registration successful, but the verification email could not be sent. <br>Response: " . $response);
     }
+    
+    // Redirect the user to verify.php so that the verification code is processed and the account is activated.
+    header("Location: " . $verification_link);
+    exit;
+  } else {
+    echo "Error executing query: " . $stmt->error;
+  }
 
-    // Generate a verification token before binding parameters
-    $verification_token = md5($email . time());
-
-    // Prepare the INSERT query (ensure your table has a column named 'verification_token')
-    $sql_insert = "INSERT INTO users (name, email, username, password, verification_code) VALUES (?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($sql_insert);
-    if ($stmt === false) {
-        die("Prepare failed: (" . $conn->errno . ") " . $conn->error);
-    }
-
-    // Hash the password before saving it to the database
-    $password_hashed = password_hash($password, PASSWORD_DEFAULT);
-    $stmt->bind_param("sssss", $name, $email, $username, $password_hashed, $verification_token);
-
-    // Execute the query
-    if ($stmt->execute()) {
-        // Build the verification link using the token
-        $verification_link = "http://yourdomain.com/verify.php?email=" . urlencode($email) . "&token=" . $verification_token;
-
-        // Now send the verification email using PHPMailer
-        $mail = new PHPMailer(true);
-        $mail->SMTPDebug = 2;
-        try {
-            // Server settings
-            $mail->isSMTP();
-            $mail->Host       = 'smtp.gmail.com';  // Gmail SMTP server
-            $mail->SMTPAuth   = true;
-            $mail->Username   = 'your_email@gllcc.edu.ph'; // Your Gmail address
-            $mail->Password   = 'your-email-password';    // Use an App Password if 2FA is enabled
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = 587;  // Gmail's SMTP port
-            
-            // Recipients: email first, then name.
-            $mail->setFrom('your_email@llcc.edu.ph', 'Your Name');
-            $mail->addAddress($email, $name);
-            
-
-            // Email content
-            $mail->isHTML(false);
-            $mail->Subject = 'Please verify your email address';
-            $mail->Body = "Hello $name,\n\nThank you for registering.\n\nPlease verify your email address by clicking the link below:\n$verification_link\n\nIf you did not register, please ignore this email.";
-
-            $mail->send();
-            showModal( "Registration successful! A verification email has been sent to your email address.");
-        } catch (Exception $e) {
-            showModal("Registration successful, but the verification email could not be sent. Mailer Error: {$mail->ErrorInfo}");
-        }
-        // Optionally, redirect to the login page
-        header("Location: login.php");
-        exit;
-    } else {
-        echo "Error executing query: " . $stmt->error;
-    }
-
-    // Close the statement
-    $stmt->close();
+  // Close the statement
+  $stmt->close();
 }
 ?>
 
@@ -121,19 +115,15 @@ if (!preg_match('/@gmail\.com$/i', $email)) {
 <head>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
-
   <title>Register</title>
   <meta content="" name="description">
   <meta content="" name="keywords">
-
   <link href="assets/img/llcc.png" rel="icon">
-
   <!-- Google Fonts -->
   <link href="https://fonts.gstatic.com" rel="preconnect">
   <link
     href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i"
     rel="stylesheet">
-
   <!-- Vendor CSS Files -->
   <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
   <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
@@ -142,14 +132,12 @@ if (!preg_match('/@gmail\.com$/i', $email)) {
   <link href="assets/vendor/quill/quill.bubble.css" rel="stylesheet">
   <link href="assets/vendor/remixicon/remixicon.css" rel="stylesheet">
   <link href="assets/vendor/simple-datatables/style.css" rel="stylesheet">
-
   <!-- Template Main CSS File -->
   <link href="assets/css/style.css" rel="stylesheet">
   <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
 <body>
-
   <main>
     <div class="container">
       <section class="section register min-vh-100 d-flex flex-column align-items-center justify-content-center py-4">
@@ -200,7 +188,7 @@ if (!preg_match('/@gmail\.com$/i', $email)) {
                       <div class="invalid-feedback">Please enter your password!</div>
                     </div>
 
-                    <div class="col-12">
+                    <!-- <div class="col-12">
                       <div class="form-check">
                         <input class="form-check-input" name="terms" type="checkbox" value="" id="acceptTerms" required>
                         <label class="form-check-label" for="acceptTerms">
@@ -208,7 +196,7 @@ if (!preg_match('/@gmail\.com$/i', $email)) {
                         </label>
                         <div class="invalid-feedback">You must agree before submitting.</div>
                       </div>
-                    </div>
+                    </div> -->
 
                     <div class="col-12">
                       <button class="btn btn-primary w-100" type="submit">Create Account</button>
@@ -268,6 +256,14 @@ if (!preg_match('/@gmail\.com$/i', $email)) {
       strengthDiv.style.color = strengthColor;
     });
   </script>
+  <script src="assets/vendor/apexcharts/apexcharts.min.js"></script>
+  <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/vendor/chart.js/chart.umd.js"></script>
+  <script src="assets/vendor/echarts/echarts.min.js"></script>
+  <script src="assets/vendor/quill/quill.js"></script>
+  <script src="assets/vendor/simple-datatables/simple-datatables.js"></script>
+  <script src="assets/vendor/tinymce/tinymce.min.js"></script>
+  <script src="assets/vendor/php-email-form/validate.js"></script>
 </body>
 
 </html>
